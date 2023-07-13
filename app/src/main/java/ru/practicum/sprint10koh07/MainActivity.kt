@@ -1,14 +1,17 @@
 package ru.practicum.sprint10koh07
 
+import android.content.Intent
 import android.graphics.Color
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import android.widget.Adapter
 import android.widget.Toast
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import java.lang.IllegalStateException
 import kotlin.random.Random
 
 class MainActivity : AppCompatActivity() {
@@ -16,52 +19,113 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        val adapter = MainActivityAdapter().apply {
-            items = (1..30).map {
+        val data: List<Any> = listOf(
+            listOf(Header(title = "Заголовок 1")),
+            (1..3).map {
                 ListElement.createRandomElement(id = it.toString())
-            }
+            },
+            listOf(Header(title = "Заголовок 2")),
+            (1..1).map {
+                ListElement.createRandomElement(id = it.toString())
+            },
+            listOf(Header(title = "Заголовок 3")),
+            (1..5).map {
+                ListElement.createRandomElement(id = it.toString())
+            },
+        ).flatten()
+        val dataItems: List<Any> = if (Random.nextBoolean()) {
+             data
+        } else {
+            listOf(
+                Error(
+                    title = "Проблема с сетью"
+                )
+            )
+        }
+
+
+        val adapter = MainActivityAdapter().apply {
+            items = dataItems
             onListElementClickListener = OnListElementClickListener { item ->
                 Toast.makeText(this@MainActivity, "Click on ${item.name}", Toast.LENGTH_SHORT)
                     .show()
+                val intent = Intent(this@MainActivity, MainActivity::class.java)
+                intent.putExtra("item_id", item.id)
+                startActivity(intent)
+            }
+            onRetryClickListener = {
+                items = data
+                notifyDataSetChanged()
             }
         }
 
         val itemsRv: RecyclerView = findViewById(R.id.items_rv)
-        itemsRv.layoutManager = GridLayoutManager(this, 3).apply {
-            spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
-                override fun getSpanSize(position: Int): Int {
-                    return if (position % 5 == 1) {
-                        2
-                    } else {
-                        1
-                    }
-                }
-
-            }
-        }
+        itemsRv.layoutManager = LinearLayoutManager(this)
         itemsRv.adapter = adapter
     }
 
 }
 
-class MainActivityAdapter : RecyclerView.Adapter<ListElementViewHolder>() {
+class MainActivityAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
-    var items: List<ListElement> = emptyList()
+    var items: List<Any> = emptyList()
     var onListElementClickListener: OnListElementClickListener? = null
+    var onRetryClickListener: (() -> Unit)? = null
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ListElementViewHolder {
-        return ListElementViewHolder(parent)
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        return when (viewType) {
+            VIEW_TYPE_LIST_ELEMENT -> ListElementViewHolder(parent)
+            VIEW_TYPE_ERROR -> ErrorViewHolder(parent)
+            VIEW_TYPE_HEADER -> HeaderViewHolder(parent)
+            else -> throw IllegalStateException("There is no ViewHolder for viewType $viewType")
+        }
+
+    }
+
+    override fun getItemViewType(position: Int): Int {
+        val item = items[position]
+        return when (item) {
+            is ListElement -> VIEW_TYPE_LIST_ELEMENT
+            is Error -> VIEW_TYPE_ERROR
+            is Header -> VIEW_TYPE_HEADER
+            else -> 0
+        }
     }
 
     override fun getItemCount(): Int {
         return items.size
     }
 
-    override fun onBindViewHolder(holder: ListElementViewHolder, position: Int) {
-        holder.bind(items[position])
-        holder.itemView.setOnClickListener {
-            onListElementClickListener?.onListElementClick(items[position])
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        when (holder) {
+            is ListElementViewHolder -> {
+                val listElement = items[position] as ListElement
+                holder.bind(listElement)
+                holder.itemView.setOnClickListener {
+                    onListElementClickListener?.onListElementClick(listElement)
+                }
+            }
+
+            is ErrorViewHolder -> {
+                holder.bind(items[position] as Error)
+                holder.retry.setOnClickListener {
+                    onRetryClickListener?.invoke()
+                }
+            }
+
+            is HeaderViewHolder -> {
+                holder.bind(items[position] as Header)
+
+            }
         }
+
+    }
+
+    companion object {
+        const val VIEW_TYPE_LIST_ELEMENT = 1
+        const val VIEW_TYPE_ERROR = 2
+        const val VIEW_TYPE_HEADER = 3
+
     }
 
 }
